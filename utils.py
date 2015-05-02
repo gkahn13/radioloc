@@ -31,6 +31,15 @@ def maxPower(x, N=256, fs=1, M=None):
     x_ = np.reshape(x[:M*N],(M,N)) * np.hamming(N)[None,:]
     X = np.fft.fftshift(np.fft.fft(x_,axis=1),axes=1)
     return abs(X).T.max(axis=0)
+    
+def smoothMaxPower(mp, fs):
+    M = int(fs/5e2) # 5000
+    if M % 2 == 0:
+        M -= 1
+    w = np.hanning(M)
+    mp_smooth = np.convolve(np.hstack((mp[:M/2],mp,mp[-M/2:])), w/w.sum(), 'valid')
+    assert(len(mp) == len(mp_smooth))
+    return mp_smooth
 
 # Plot an image of the spectrogram y, with the axis labeled with time tl,
 # and frequency fl

@@ -65,8 +65,8 @@ class ServosSDRs:
         
     def get_angles_and_samples(self, ith):
         """ For ith sdr, return oldest angle/sample if exists, else None """
-        if not self.angles_and_samples[i].empty():
-            return self.angles_and_samples[i].get()
+        if not self.angles_and_samples[ith].empty():
+            return self.angles_and_samples[ith].get()
 
 ########
 # TEST #
@@ -75,7 +75,7 @@ if __name__ == '__main__':
     from servos import *
     from sdrs import *
     
-    servos = Servos(3, '/dev/ttyACM1')
+    servos = Servos(3, '/dev/ttyACM0')
     
     num_sdrs = 3
     rtlsdrs = [None]*num_sdrs
@@ -92,7 +92,7 @@ if __name__ == '__main__':
     servos_sdrs = ServosSDRs(servos, sdrs)
 
 
-    ham = serial.Serial('/dev/ttyUSB0')
+    ham = serial.Serial('/dev/ttyUSB1')
     ham.setDTR(1)
     time.sleep(0.5)
 
@@ -113,5 +113,9 @@ if __name__ == '__main__':
         plt.plot(angles, mp)
         num_rots += 1
     print('num_rots: {0}'.format(num_rots))
+    
+    plt.show(block=False)
+    print('Press enter to exit')
+    raw_input()
     
     

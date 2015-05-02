@@ -79,10 +79,9 @@ class Servos:
 # TEST #
 ########
 if __name__ == '__main__':
-    servos = Servos(3, '/dev/ttyACM1')
-    
+    servos = Servos(3, '/dev/ttyACM0')
     curr_angles = servos.get_angles()
-    des_angles = [0., 0., 0.]
+    des_angles = [0.5, 0., 0.]
     speed = 0.5
     expected_time = abs(des_angles[0] - curr_angles[0])/speed
 
