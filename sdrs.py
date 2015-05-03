@@ -1,67 +1,70 @@
 from utils import *
 
-def init_rtlsdrs(num_sdrs):
-    rtlsdrs = [None]*num_sdrs
-    for i in xrange(librtlsdr.rtlsdr_get_device_count()):
-        rtlsdrs[i] = RtlSdr(i)
-            
-    return rtlsdrs 
-
 class SDRs:
     """
     Functionality for multiple SDRs (non-blocking)
     """
-    def __init__(self, rtlsdrs, fc, fs=2.4e6, gain=0.1):
-        self.rtlsdrs = rtlsdrs
-        for rtlsdr in self.rtlsdrs:
-            if rtlsdr is None:
-                continue
-            rtlsdr.sample_rate = fs
-            rtlsdr.center_freq = fc
-            rtlsdr.gain = gain
-            
+    def __init__(self, rtlsdr_devs, fc, fs=2.4e6, gain=0.1):
+        self.rtlsdr_devs = rtlsdr_devs
+        self.rtlsdrs = [None]*len(self.rtlsdr_devs)
+        
+        self.fc = fc
         self.fs = fs
+        self.gain = gain
             
         # for asynchronous reads
-        self.read_queues = [Queue.Queue() for _ in self.rtlsdrs]
-        self.read_run_flags = [False]*len(self.rtlsdrs)
-        self.read_is_stoppeds = [False]*len(self.rtlsdrs)
-        self.read_threads = [None]*len(self.rtlsdrs)
+        self.read_queues = [Queue.Queue() for _ in self.rtlsdr_devs]
+        self.read_run_flags = [False]*len(self.rtlsdr_devs)
+        self.read_is_stoppeds = [False]*len(self.rtlsdr_devs)
+        self.read_threads = [None]*len(self.rtlsdr_devs)
         
+        for ith, rtlsdr_dev in enumerate(self.rtlsdr_devs):
+            if rtlsdr_dev is None:
+                continue
+            
+            self.rtlsdrs[ith] = RtlSdr(rtlsdr_dev)
+            self.rtlsdrs[ith].sample_rate = self.fs
+            self.rtlsdrs[ith].center_freq = self.fc
+            self.rtlsdrs[ith].gain = self.gain
+
+            self.read_threads[ith] = threading.Thread(target=self.run, args=(ith,))
+            self.read_threads[ith].daemon = True
+            self.read_threads[ith].start()    
     
     def start_read(self, ith):
-        if self.read_run_flags[ith] or self.rtlsdrs[ith] is None:
-            return
+        if self.read_run_flags[ith] or \
+            self.rtlsdr_devs[ith] is None or \
+            self.read_is_stoppeds[ith]:
+            return False
         
         self.read_run_flags[ith] = True
-        self.read_threads[ith] = threading.Thread(target=self.run, args=(ith,))
-        self.read_threads[ith].daemon = True
-        self.read_threads[ith].start()                 
-    
+        return True
+        
     def stop_read(self, ith):
-        if not self.read_run_flags[ith] or self.rtlsdrs[ith] is None:
-            return
-
+        """ Returns maxPower of samples gathered """
+        if not self.read_run_flags[ith] or self.rtlsdr_devs[ith] is None:
+            return None
+        
         self.read_run_flags[ith] = False
         
-        while not self.read_is_stoppeds[ith]:
-            time.sleep(0.2)
-        self.read_is_stoppeds[ith] = False
-        
-        x = []
+        x = np.array([])
         while not self.read_queues[ith].empty():
-            x += self.read_queues[ith].get()
+            x = np.append(x, self.read_queues[ith].get())
         return np.array(x)
     
-    def run(self, ith, read_slice=0.1):
-        num_samples = 256 * ((read_slice * self.fs) // 256)
-        
-        while self.read_run_flags[ith]:
-            samples = self.rtlsdrs[ith].read_samples(num_samples)
-            self.read_queues[ith].put(list(samples))
+    def run(self, ith, M=8*1024):
+        def read_cb(samples, q):
+            if self.read_run_flags[ith]:
+                try:
+                    q.put(maxPower(samples))
+                except Exception as e:
+                    print('read_cb exception: {0}'.format(e))
             
+        try:
+            self.rtlsdrs[ith].read_samples_async(read_cb, M, context=self.read_queues[ith])
+        except Exception as e:
+            print(e)
         self.read_is_stoppeds[ith] = True
-    
     
 ########
 # TEST #

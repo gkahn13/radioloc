@@ -25,13 +25,12 @@ def avgPS( x, N=256, fs=1):
     X = np.fft.fftshift(np.fft.fft(x_,axis=1),axes=1)
     return np.r_[-N/2.0:N/2.0]/N*fs, np.mean(abs(X**2),axis=0)
 
-# Compute max of FFT over sliding window
 def maxPower(x, N=256, fs=1, M=None):
     M = np.floor(len(x)/N)
     x_ = np.reshape(x[:M*N],(M,N)) * np.hamming(N)[None,:]
     X = np.fft.fftshift(np.fft.fft(x_,axis=1),axes=1)
-    return abs(X).T.max(axis=0)
-    
+    return abs(X**2).T.max(axis=0)
+
 def smoothMaxPower(mp, fs):
     M = int(fs/5e2) # 5000
     if M % 2 == 0:

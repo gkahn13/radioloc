@@ -11,7 +11,7 @@ class ServosSDRs:
         self.speed = np.pi/3.
         self.run_flag = False
         self.is_stopped = False
-        self.angles_and_samples = [Queue.Queue() for _ in xrange(self.servos.num_servos)]
+        self.angles_and_maxpowers = [Queue.Queue() for _ in xrange(self.servos.num_servos)]
         
     def start(self, speed=None):
         if self.run_flag:
@@ -20,7 +20,9 @@ class ServosSDRs:
         if speed is not None:
             self.speed = speed
         
-        self.angles_and_samples = [Queue.Queue() for _ in xrange(self.servos.num_servos)]
+        for q in self.angles_and_maxpowers:
+            with q.mutex:
+                q.queue.clear()
         
         self.run_flag = True
         self.thread = threading.Thread(target=self.run, args=())
@@ -49,10 +51,11 @@ class ServosSDRs:
                     self.sdrs.start_read(i)
                 self.servos.set_angles([end_angle]*self.servos.num_servos, speed=self.speed, fs=fs)
                 for i in xrange(self.servos.num_servos):
-                    samples = self.sdrs.stop_read(i)
-                    if samples is not None:
-                        angles = np.linspace(start_angle, end_angle, len(samples))
-                        self.angles_and_samples[i].put([angles, samples])
+                    time.sleep(0.2) # TODO: why necessary?
+                    mp = self.sdrs.stop_read(i)
+                    if mp is not None:
+                        angles = np.linspace(start_angle, end_angle, len(mp))
+                        self.angles_and_maxpowers[i].put([angles, mp])
                 start_angle, end_angle = end_angle, start_angle
             except Exception as e:
                 num_exceptions += 1
@@ -63,11 +66,11 @@ class ServosSDRs:
             
         self.is_stopped = True
         
-    def get_angles_and_samples(self, ith):
+    def get_angles_and_maxpowers(self, ith):
         """ For ith sdr, return oldest angle/sample if exists, else None """
-        if not self.angles_and_samples[ith].empty():
-            return self.angles_and_samples[ith].get()
-
+        if not self.angles_and_maxpowers[ith].empty():
+            return self.angles_and_maxpowers[ith].get()
+            
 ########
 # TEST #
 ########

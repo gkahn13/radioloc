@@ -7,8 +7,8 @@ class Servos:
     
     def __init__(self, num_servos, port, baudrate=115200, offset=0.0):
         self.offset = offset
-        self.min_angle = -np.pi/4.
-        self.max_angle = np.pi/4.
+        self.min_angle = -np.pi/3
+        self.max_angle = np.pi/3
         
         self.num_servos = num_servos
         self.serial = serial.Serial(port, baudrate=baudrate)
