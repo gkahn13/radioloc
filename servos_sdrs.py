@@ -13,7 +13,7 @@ class ServosSDRs:
         self.is_stopped = False
         self.angles_and_maxpowers = [Queue.Queue() for _ in xrange(self.servos.num_servos)]
         
-    def start(self, speed=None):
+    def start(self, speed=None, run_on_stop_read=lambda:None):
         if self.run_flag:
             return
         
@@ -25,7 +25,7 @@ class ServosSDRs:
                 q.queue.clear()
         
         self.run_flag = True
-        self.thread = threading.Thread(target=self.run, args=())
+        self.thread = threading.Thread(target=self.run, args=(run_on_stop_read,))
         self.thread.daemon = True
         self.thread.start()                 
     
@@ -39,9 +39,10 @@ class ServosSDRs:
             time.sleep(0.2)
         self.is_stopped = False
         
-    def run(self, fs=200.):
+    def run(self, run_on_stop_read=lambda:None):
+        """ run_on_stop_read for things like plotting """
         num_exceptions = 0
-        self.servos.set_angles([self.servos.max_angle]*self.servos.num_servos, speed=self.speed, fs=fs)
+        self.servos.set_angles([self.servos.max_angle]*self.servos.num_servos, speed=self.speed)
         
         start_angle, end_angle = self.servos.max_angle, self.servos.min_angle
         while self.run_flag:
@@ -49,7 +50,7 @@ class ServosSDRs:
                 # record, command servos, compute angles/power
                 for i in xrange(self.servos.num_servos):
                     self.sdrs.start_read(i)
-                self.servos.set_angles([end_angle]*self.servos.num_servos, speed=self.speed, fs=fs)
+                self.servos.set_angles([end_angle]*self.servos.num_servos, speed=self.speed)
                 for i in xrange(self.servos.num_servos):
                     time.sleep(0.2) # TODO: why necessary?
                     mp = self.sdrs.stop_read(i)
@@ -57,11 +58,12 @@ class ServosSDRs:
                         angles = np.linspace(start_angle, end_angle, len(mp))
                         self.angles_and_maxpowers[i].put([angles, mp])
                 start_angle, end_angle = end_angle, start_angle
+                run_on_stop_read()
             except Exception as e:
                 num_exceptions += 1
                 print('ServosSdr.run exception: {0}'.format(e))
                 
-                if num_exceptions > 5:
+                if num_exceptions > 1:
                     break
             
         self.is_stopped = True
@@ -70,7 +72,7 @@ class ServosSDRs:
         """ For ith sdr, return oldest angle/sample if exists, else None """
         if not self.angles_and_maxpowers[ith].empty():
             return self.angles_and_maxpowers[ith].get()
-            
+
 ########
 # TEST #
 ########

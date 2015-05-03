@@ -26,7 +26,7 @@ class Servos:
     def get_angles(self):
         return list(self.curr_angles)
         
-    def set_angles(self, des_angles, speed=None, fs=100.):
+    def set_angles(self, des_angles, speed=None, fs=200.):
         """
         :param des_angle: desired angles (radians). None means don't move
         :param speed: if None, go as fast as possible. Else rad/s
@@ -40,31 +40,45 @@ class Servos:
         if speed is None:
             self.write(des_angles)
         else:
-            angle_trajs = list()
-            # create trajectories
-            for curr_angle, des_angle in zip(self.curr_angles, des_angles):
-                sign = 1 if des_angle > curr_angle else -1
-                angle_traj = [curr_angle] + list(np.r_[curr_angle:des_angle:sign*speed/fs])
-                angle_trajs.append(angle_traj)
+            def is_done(start, curr, des):
+                if (start <= des) and (curr >= des):
+                    return True
+                if (start >= des) and (curr <= des):
+                    return True
+                return False
             
-            # make them all the same length
-            max_angle_traj_len = max(len(traj) for traj in angle_trajs)
-            for i, traj in enumerate(angle_trajs):
-                pad_len = max_angle_traj_len - len(traj)
-                if pad_len > 0:
-                    angle_trajs[i] = np.pad(np.array(traj), (1, pad_len-1), 'edge')
-                
-            angle_trajs = np.array(angle_trajs).T
-            for angles in angle_trajs:
-                self.write(angles, fs)
+            def pos(start, des, speed, elapsed):
+                sign = 1 if des > start else -1
+                return start + sign*speed*elapsed
+            
+            start_angles = list(self.curr_angles)
+            des_angles = list(des_angles)
+            start_time = time.time()
+            while True:
+                is_all_done = True
+                write_angles = list()
+                for start, curr, des in zip(start_angles, self.curr_angles, des_angles):
+                    done = is_done(start, curr, des)
+                    is_all_done = is_all_done and done
+                    
+                    if not done:
+                        write_angles.append(pos(start, des, speed, time.time()-start_time))
+                    else:
+                        write_angles.append(des)
+                        
+                self.write(write_angles, fs=fs)
+                    
+                if is_all_done:
+                    break
             
     def write(self, angles, fs=100.):
         """
         :param angles: list of desired angles
         :param fs: how long to sleep between writes
         """
-        if not self.is_valid_angles(angles):
-            return
+        #if not self.is_valid_angles(angles):
+        #    return
+        angles = np.clip(angles, self.min_angle, self.max_angle)
         
         write_str = ''
         for i, angle in enumerate(angles):

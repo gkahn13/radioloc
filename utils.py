@@ -32,7 +32,7 @@ def maxPower(x, N=256, fs=1, M=None):
     return abs(X**2).T.max(axis=0)
 
 def smoothMaxPower(mp, fs):
-    M = int(fs/5e2) # 5000
+    M = int(fs/5e3) # 5000
     if M % 2 == 0:
         M -= 1
     w = np.hanning(M)
@@ -98,3 +98,8 @@ def myspectrogram_hann_ovlp(x, m, fs, fc,dbf = 60):
         sg_plot(t_range, f_range, xmf,dbf = dbf)
     
     return t_range, f_range, xmf
+    
+def subsample_fixed_length(x, length):
+    skip = len(x) // length
+    return x[::skip]
+    
