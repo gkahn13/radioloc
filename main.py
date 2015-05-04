@@ -17,7 +17,7 @@ sdrs = SDRs(rtlsdr_devs, fc)
 
 servos_sdrs = ServosSDRs(servos, sdrs)
 
-ham = serial.Serial('/dev/ttyUSB1')
+ham = serial.Serial('/dev/ttyUSB0')
 
 ###################################
 # Continuously plot incoming data #
