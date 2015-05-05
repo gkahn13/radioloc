@@ -8,119 +8,76 @@ class ServosSDRs:
         self.servos = servos
         self.sdrs = sdrs
         
-        self.speed = np.pi/3.
-        self.run_flag = False
-        self.is_stopped = False
+        self.default_speed = np.pi/3.
+        
+        self.run_flags = [False]*self.servos.num_servos
+        self.is_stoppeds = [False]*self.servos.num_servos
+        self.threads = [None]*self.servos.num_servos
+        
         self.angles_and_maxpowers = [Queue.Queue() for _ in xrange(self.servos.num_servos)]
         
-    def start(self, speed=None, run_on_stop_read=lambda:None):
-        if self.run_flag:
+    def start(self, ith, speed=None, run_on_stop_read=lambda:None):
+        if self.run_flags[ith]:
             return
         
-        if speed is not None:
-            self.speed = speed
+        q = self.angles_and_maxpowers[ith]
+        with q.mutex:
+            q.queue.clear()
         
-        for q in self.angles_and_maxpowers:
-            with q.mutex:
-                q.queue.clear()
-        
-        self.run_flag = True
-        self.thread = threading.Thread(target=self.run, args=(run_on_stop_read,))
-        self.thread.daemon = True
-        self.thread.start()                 
+        self.run_flags[ith] = True
+        self.threads[ith] = threading.Thread(target=self.run, args=(ith,speed,run_on_stop_read,))
+        self.threads[ith].daemon = True
+        self.threads[ith].start()                 
     
-    def stop(self):
-        if not self.run_flag:
+    def stop(self, ith):
+        if not self.run_flags[ith]:
             return
         
-        self.run_flag = False
+        self.run_flags[ith] = False
         
-        while not self.is_stopped:
+        while not self.is_stoppeds[ith]:
             time.sleep(0.2)
-        self.is_stopped = False
+        self.is_stoppeds[ith] = False
         
-    def run(self, run_on_stop_read=lambda:None):
+    def run(self, ith, speed=None, run_on_stop_read=lambda:None):
         """ run_on_stop_read for things like plotting """
+        speed = self.default_speed if speed is None else speed
         num_exceptions = 0
-        self.servos.set_angles([self.servos.max_angle]*self.servos.num_servos, speed=self.speed)
         
-        start_angle, end_angle = self.servos.max_angle, self.servos.min_angle
-        while self.run_flag:
+        curr_angle = self.servos.min_angle
+        self.servos.set_angle(ith, curr_angle, speed)
+        des_angle = self.servos.max_angle
+        
+        while self.run_flags[ith]:
             try:
-                # record, command servos, compute angles/power
-                for i in xrange(self.servos.num_servos):
-                    self.sdrs.start_read(i)
-                self.servos.set_angles([end_angle]*self.servos.num_servos, speed=self.speed)
-                for i in xrange(self.servos.num_servos):
-                    time.sleep(0.2) # TODO: why necessary?
-                    mp = self.sdrs.stop_read(i)
-                    if mp is not None:
-                        angles = np.linspace(start_angle, end_angle, len(mp))
-                        self.angles_and_maxpowers[i].put([angles, mp])
-                start_angle, end_angle = end_angle, start_angle
+                self.sdrs.start_read(ith)
+                angle, t = self.servos.set_angle(ith, des_angle, speed)
+                mp = self.sdrs.stop_read(ith)
+                
+                if mp is not None:
+                    angles = np.linspace(curr_angle, des_angle, len(mp))
+                    self.angles_and_maxpowers[ith].put([angles, mp])
+                
+                curr_angle, des_angle = des_angle, curr_angle
                 run_on_stop_read()
             except Exception as e:
                 num_exceptions += 1
                 print('ServosSdr.run exception: {0}'.format(e))
-                
+        
                 if num_exceptions > 1:
                     break
-            
-        self.is_stopped = True
+        
+        self.is_stoppeds[ith] = True
+        self.servos.set_angle(ith, 0, 0, block=False)
         
     def get_angles_and_maxpowers(self, ith):
         """ For ith sdr, return oldest angle/sample if exists, else None """
         if not self.angles_and_maxpowers[ith].empty():
             return self.angles_and_maxpowers[ith].get()
+            
 
 ########
 # TEST #
 ########
 if __name__ == '__main__':            
-    from servos import *
-    from sdrs import *
-    
-    servos = Servos(3, '/dev/ttyACM0')
-    
-    num_sdrs = 3
-    rtlsdrs = [None]*num_sdrs
-    for i in xrange(librtlsdr.rtlsdr_get_device_count()):
-        try:
-            rtlsdrs[i] = RtlSdr(i)
-        except:
-            rtlsdrs[i].close()
-            rtlsdrs[i] = RtlSdr(i)
-            
-    fc = 145.6e6
-    sdrs = SDRs(rtlsdrs, fc)
-    
-    servos_sdrs = ServosSDRs(servos, sdrs)
-
-
-    ham = serial.Serial('/dev/ttyUSB1')
-    ham.setDTR(1)
-    time.sleep(0.5)
-
-    servos_sdrs.start()
-    print('Press enter to stop')
-    raw_input()
-    servos_sdrs.stop()        
-
-    ham.setDTR(0)
-    
-    num_rots = 0
-    q = servos_sdrs.angles_and_samples[0]
-    while not q.empty():
-        angles, samples = q.get()
-        mp = maxPower(samples)
-        angles = np.linspace(angles[0], angles[-1], len(mp))
-        f = plt.figure()
-        plt.plot(angles, mp)
-        num_rots += 1
-    print('num_rots: {0}'.format(num_rots))
-    
-    plt.show(block=False)
-    print('Press enter to exit')
-    raw_input()
-    
-    
+    pass

@@ -13,6 +13,7 @@ import threading
 import matplotlib.pyplot as plt
 
 from rtlsdr import RtlSdr, librtlsdr, helpers
+import pyaudio
 
 ####################
 # Useful functions #
@@ -31,13 +32,13 @@ def maxPower(x, N=256, fs=1, M=None):
     X = np.fft.fftshift(np.fft.fft(x_,axis=1),axes=1)
     return abs(X**2).T.max(axis=0)
 
-def smoothMaxPower(mp, fs):
-    M = int(fs/5e3) # 5000
+def smoothMaxPower(mp, M):
     if M % 2 == 0:
         M -= 1
     w = np.hanning(M)
     mp_smooth = np.convolve(np.hstack((mp[:M/2],mp,mp[-M/2:])), w/w.sum(), 'valid')
-    assert(len(mp) == len(mp_smooth))
+    if len(mp) != len(mp_smooth):
+        print('WARNING: len(mp) = {0} but len(mp_smooth) = {1}'.format(len(mp), len(mp_smooth)))
     return mp_smooth
 
 # Plot an image of the spectrogram y, with the axis labeled with time tl,
@@ -102,4 +103,147 @@ def myspectrogram_hann_ovlp(x, m, fs, fc,dbf = 60):
 def subsample_fixed_length(x, length):
     skip = len(x) // length
     return x[::skip]
+    
+def play_audio( Q, p, fs , dev, ser="", keydelay=0, chunk=128, repeat=False):
+    # play_audio plays audio with sampling rate = fs
+    # Q - A queue object from which to play
+    # p   - pyAudio object
+    # fs  - sampling rate
+    # dev - device number
+    # ser - pyserial device to key the radio
+    # keydelay - delay after keying the radio
+    
+    # Example:
+    # fs = 44100
+    # p = pyaudio.PyAudio() #instantiate PyAudio
+    # Q = Queue.queue()
+    # Q.put(data)
+    # Q.put("EOT") # when function gets EOT it will quit
+    # play_audio( Q, p, fs,1 ) # play audio
+    # p.terminate() # terminate pyAudio
+    
+    # open output stream
+    ostream = p.open(format=pyaudio.paFloat32, channels=1, rate=int(fs),output=True,output_device_index=dev,
+                    frames_per_buffer=chunk)
+    # play audio
+    last_audio = None
+    while (1):
+        if repeat and Q.empty() and last_audio is not None:
+            data = last_audio
+        else:
+            data = Q.get()
+        if data=="EOT"  :
+            break
+        elif (data=="KEYOFF"  and ser!=""):
+            ser.setDTR(0)
+            #print("keyoff\n")
+        elif (data=="KEYON" and ser!=""):
+            ser.setDTR(1)  # key PTT
+            #print("keyon\n")
+            time.sleep(keydelay) # wait 200ms (default) to let the power amp to ramp up
+            
+        else:
+            try:
+                last_audio = data
+                ostream.write( data.astype(np.float32).tostring() )
+            except:
+                print("Exception")
+                break
+            
+def record_audio( queue, p, fs ,dev,chunk=128):
+    # record_audio records audio with sampling rate = fs
+    # queue - output data queue
+    # p     - pyAudio object
+    # fs    - sampling rate
+    # dev   - device number 
+    # chunk - chunks of samples at a time default 1024
+    #
+    # Example:
+    # fs = 44100
+    # Q = Queue.queue()
+    # p = pyaudio.PyAudio() #instantiate PyAudio
+    # record_audio( Q, p, fs, 1) # 
+    # p.terminate() # terminate pyAudio
+    
+   
+    istream = p.open(format=pyaudio.paFloat32, channels=1, rate=int(fs),input=True,input_device_index=dev,
+                     frames_per_buffer=chunk)
+
+    # record audio in chunks and append to frames
+    frames = [];
+    while (1):
+        try:  # when the pyaudio object is distroyed stops
+            data_str = istream.read(chunk) # read a chunk of data
+        except:
+            break
+        data_flt = np.fromstring( data_str, 'float32' ) # convert string to float
+        queue.put( data_flt ) # append to list
+
+def printDevNumbers(p):
+    N = p.get_device_count()
+    for n in range(0,N):
+        name = p.get_device_info_by_index(n).get('name')
+        print n, name
+        
+def getSdrDevNumber(p):
+    N = p.get_device_count()
+    for n in xrange(0,N):
+        name = p.get_device_info_by_index(n).get('name')
+        if 'pnp' in name.lower():
+            return n
+    return -1
+    
+def play_pure_tone(p, s, freq, duration, mag=0.5):
+    """
+    p: pyaudio object
+    s: serial object
+    freq: frequency in Hz
+    duration: time in sec
+    """
+    s.setDTR(0)
+
+    # creates a queue
+    Qout = Queue.Queue()
+   
+    dusb_out =  getSdrDevNumber(p)
+    assert(dusb_out >= 0)
+
+    t = np.r_[0:duration*44100.0]/44100.0
+    sig = mag*np.sin(2*np.pi*freq*t)
+    t_play = threading.Thread(target = play_audio,   args = (Qout,   p, 44100, dusb_out, s, 0.2 ))
+
+    # play audio from Queue 
+    t_play.start()
+
+    Qout.put("KEYON")
+    Qout.put(sig)
+    Qout.put("KEYOFF")
+    Qout.put("EOT")
+    
+def play_pure_tone_continuously(p, s, freq, mag=0.5):
+    """
+    p: pyaudio object
+    s: serial object
+    freq: frequency in Hz
+    duration: time in sec
+    """
+    s.setDTR(0)
+
+    # creates a queue
+    Qout = Queue.Queue()
+   
+    dusb_out =  getSdrDevNumber(p)
+    assert(dusb_out >= 0)
+
+    t = np.r_[0:1*44100.0]/44100.0
+    sig = mag*np.sin(2*np.pi*freq*t)
+    t_play = threading.Thread(target = play_audio,   args = (Qout,   p, 44100, dusb_out, s, 0.2, 128, True))
+
+    # play audio from Queue 
+    t_play.start()
+
+    Qout.put("KEYON")
+    Qout.put(sig)
+
+    return Qout
     

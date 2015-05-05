@@ -4,7 +4,7 @@ class SDRs:
     """
     Functionality for multiple SDRs (non-blocking)
     """
-    def __init__(self, rtlsdr_devs, fc, fs=2.4e6, gain=0.1):
+    def __init__(self, rtlsdr_devs, fc, fs=2.4e6, gain=1.0):
         self.rtlsdr_devs = rtlsdr_devs
         self.rtlsdrs = [None]*len(self.rtlsdr_devs)
         
@@ -29,7 +29,13 @@ class SDRs:
 
             self.read_threads[ith] = threading.Thread(target=self.run, args=(ith,))
             self.read_threads[ith].daemon = True
-            self.read_threads[ith].start()    
+            self.read_threads[ith].start()
+            
+    def set_gains(self, gain):
+        self.gain = gain
+        for rtlsdr in self.rtlsdrs:
+            if rtlsdr is not None:
+                rtlsdr.gain = self.gain
     
     def start_read(self, ith):
         if self.read_run_flags[ith] or \
@@ -52,11 +58,12 @@ class SDRs:
             x = np.append(x, self.read_queues[ith].get())
         return np.array(x)
     
-    def run(self, ith, M=8*1024):
+    def run(self, ith, M=64*1024): # 64 * 1024
         def read_cb(samples, q):
             if self.read_run_flags[ith]:
                 try:
-                    q.put(maxPower(samples))
+                    q.put(maxPower(samples, N=32*1024))
+                    #q.put(samples[::M])
                 except Exception as e:
                     print('read_cb exception: {0}'.format(e))
             
@@ -66,27 +73,11 @@ class SDRs:
             print(e)
         self.read_is_stoppeds[ith] = True
     
+    
+
 ########
 # TEST #
 ########
 if __name__ == '__main__':
-    num_sdrs = 3
-    rtlsdrs = [None]*num_sdrs
-    for i in xrange(librtlsdr.rtlsdr_get_device_count()):
-        try:
-            rtlsdrs[i] = RtlSdr(i)
-        except:
-            rtlsdrs[i].close()
-            rtlsdrs[i] = RtlSdr(i)
-            
-    fc = 145.6e6
-    sdrs = SDRs(rtlsdrs, fc)
+    pass
     
-    print('Start reading')
-    sdrs.start_read(0)
-    print('Sleeping...')
-    time.sleep(1)
-    print('Stop reading')
-    x = np.array([])
-    x = sdrs.stop_read(0)
-    print('len(x): {0}'.format(len(x)))
