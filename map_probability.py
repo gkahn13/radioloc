@@ -30,7 +30,7 @@ class MapProbability:
         self.cbs = [None]*(len(locs)+1)
         
         for ith in xrange(len(locs)+1):
-            self.grids[ith] = np.ones((self.grid_size,self.grid_size))/(grid_size*grid_size)
+            self.grids[ith] = np.ones((self.grid_size,self.grid_size),dtype=float)/(grid_size*grid_size)
         
         self.fig, self.axes = plt.subplots(1,1+len(locs))
         for ith, ax in enumerate(self.axes):
@@ -54,10 +54,44 @@ class MapProbability:
         """
         update internal probability distribution for ith sdr given angle/prob
         """
-        grid = MapProbability.rotate_spec(angle, prob, self.grid_size, self.locs[ith], self.orientations[ith])
-        with self.grids_lock:
-            self.grids[ith+1] *= grid
-            self.grids[ith+1] /= self.grids[ith+1].sum()
+        grid, loc, orientation = self.grids[ith+1].copy(), self.locs[ith], self.orientations[ith]
+        valid = np.zeros(grid.shape, dtype=bool)
+        for i in np.r_[:grid.shape[0]]:  #row
+            for j in np.r_[:grid.shape[1]]: #column
+                if j == loc[1]:
+                    if i < loc[0]:
+                        cell_angle = -np.pi/2
+                    else:
+                        cell_angle = np.pi/2
+                else:
+                    cell_angle = np.arctan2(i-loc[0], j-loc[1])
+
+                cell_angle = cell_angle + orientation
+
+                if cell_angle > np.pi:
+                    cell_angle = cell_angle - 2*np.pi
+                elif cell_angle < -np.pi:
+                    cell_angle = cell_angle + 2*np.pi
+
+                # finding the closest point in angle
+                index = np.argmin(abs(angle-cell_angle))
+
+                if min(angle) <= cell_angle <= max(angle):
+                    valid[i,j] = True
+                    grid[i,j] *= prob[index]
+                else:
+                    #valid[i,j] = False
+                    grid[i,j] = 0
+        
+        #grid[valid] /= grid[valid].sum()
+        #grid[True-valid] /= grid[True-valid].sum()
+        grid /= grid.sum()
+        self.grids[ith+1] = grid
+        
+        #grid = MapProbability.rotate_spec(angle, prob, self.grids[ith+1], self.locs[ith], self.orientations[ith])
+        #with self.grids_lock:
+        #    self.grids[ith+1] *= grid
+        #    self.grids[ith+1] /= self.grids[ith+1].sum()
     
     def get_total_probability(self):
         with self.grids_lock:
@@ -71,10 +105,10 @@ class MapProbability:
         return self.grids[ith+1]
     
     @staticmethod
-    def rotate_spec(angle, prob_dist, grid_size, loc, offset):
-        grid = [[0 for x in np.r_[0:grid_size]] for x in np.r_[0:grid_size]] 
-        for i in np.r_[0:grid_size]:  #row
-            for j in np.r_[0:grid_size]: #column
+    def rotate_spec(angle, prob_dist, prev_grid, loc, offset):
+        grid = prev_grid.copy()
+        for i in xrange(grid.shape[0]):  #row
+            for j in xrange(grid.shape[1]): #column
                 if j == loc[1]:
                     if i < loc[0]:
                         cell_angle = -np.pi/2
@@ -95,8 +129,6 @@ class MapProbability:
 
                 if min(angle) <= cell_angle <= max(angle):
                     grid[i][j] = prob_dist[index]
-                else:
-                    grid[i][j] = 0
 
         return grid
         
