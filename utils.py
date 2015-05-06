@@ -31,6 +31,12 @@ def maxPower(x, N=256, fs=1, M=None):
     x_ = np.reshape(x[:M*N],(M,N)) * np.hamming(N)[None,:]
     X = np.fft.fftshift(np.fft.fft(x_,axis=1),axes=1)
     return abs(X**2).T.max(axis=0)
+    
+def avgPower(x, N=256, fs=1, M=None):
+    M = np.floor(len(x)/N)
+    x_ = np.reshape(x[:M*N],(M,N)) * np.hamming(N)[None,:]
+    X = np.fft.fftshift(np.fft.fft(x_,axis=1),axes=1)
+    return abs(X**2).T.mean(axis=0)
 
 def smoothMaxPower(mp, M):
     if M % 2 == 0:
