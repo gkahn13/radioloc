@@ -5,7 +5,7 @@ from servos_sdrs import *
 from map_probability import *
 
 num_antennas = 3
-fc = 910e6 # 145.6e6
+fc = 909.97e6 # 910e6 # 145.6e6
 antennas = [0, 1]
 
 grid_size = 20
@@ -32,7 +32,7 @@ map_prob = MapProbability(locs, orientations, grid_size)
 ###################
 # Initializations #
 ###################
-sdrs.set_gains(0.1)
+sdrs.set_gains(1e6)
 # ham.setDTR(0)
 # p = pyaudio.PyAudio()
 
@@ -45,6 +45,7 @@ sdrs.set_gains(0.1)
 #plt.draw()
 #plt.pause(0.01)
 #plot_lock = threading.RLock()
+prob_updated = [False]*num_antennas
 
 def plot_step(ith):
     angles_and_maxpowers = servos_sdrs.get_angles_and_maxpowers(ith)
@@ -72,7 +73,8 @@ def plot_step(ith):
         #z = subsample_fixed_length(mp_smooth, L)
         
         map_prob.update_probability(ith, angles, mp/mp.sum())
-        map_prob.draw_map(ith)
+        prob_updated[ith] = True
+        #map_prob.draw_map(ith)
         #map_prob.draw_map()
         
         #with plot_lock:
@@ -94,7 +96,10 @@ servos_sdrs.start(1, speed=np.pi/5., run_on_stop_read=lambda: plot_step(1))
 
 try:
     while True:
-        plt.pause(1.)
+        for ith in [1]:
+            if prob_updated[ith]:
+                map_prob.draw_map(ith)
+        plt.pause(0.5)
 except KeyboardInterrupt:
     print('Exited')
 

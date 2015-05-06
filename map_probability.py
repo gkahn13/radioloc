@@ -150,10 +150,10 @@ class MapProbability:
             self.imshow_objs[plot_num].set_data(grid)
             self.cbs[plot_num].set_clim(vmin=grid.min(),vmax=grid.max())
             self.cbs[plot_num].draw_all() 
-            self.axes[plot_num].draw_artist(self.imshow_objs[plot_num])
-            self.fig.canvas.blit(self.axes[plot_num].bbox)
+            #self.axes[plot_num].draw_artist(self.imshow_objs[plot_num])
+            #self.fig.canvas.blit(self.axes[plot_num].bbox)
             
-            #plt.draw()
+            plt.draw()
             plt.pause(0.01)
     
 
