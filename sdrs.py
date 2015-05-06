@@ -4,7 +4,7 @@ class SDRs:
     """
     Functionality for multiple SDRs (non-blocking)
     """
-    def __init__(self, rtlsdr_devs, fc, fs=2.4e6, gain=1.0):
+    def __init__(self, rtlsdr_devs, fc, fs=2.4e5, gain=1.0):
         self.rtlsdr_devs = rtlsdr_devs
         self.rtlsdrs = [None]*len(self.rtlsdr_devs)
         
@@ -58,12 +58,14 @@ class SDRs:
             x = np.append(x, self.read_queues[ith].get())
         return np.array(x)
     
-    def run(self, ith, M=64*1024): # 64 * 1024
+    def run(self, ith, M=32*1024): # 64 * 1024
         def read_cb(samples, q):
             if self.read_run_flags[ith]:
                 try:
-                    q.put(maxPower(samples, N=32*1024))
-                    #q.put(samples[::M])
+                    q.put(maxPower(samples, N=4*1024))
+                    #q.put(maxPower(samples - samples.mean(), N=4*1024))
+                    #q.put((samples - samples.mean()))
+                    #q.put(samples)
                 except Exception as e:
                     print('read_cb exception: {0}'.format(e))
             
@@ -72,12 +74,24 @@ class SDRs:
         except Exception as e:
             print(e)
         self.read_is_stoppeds[ith] = True
-    
-    
 
 ########
 # TEST #
 ########
 if __name__ == '__main__':
-    pass
+    num_antennas = 3
+    fc = 910e6 # 145.6e6
+
+    dev_cnt = librtlsdr.rtlsdr_get_device_count()
+    rtlsdr_devs = [i if i < dev_cnt else None for i in xrange(num_antennas)]
+    sdrs = SDRs(rtlsdr_devs, fc)
+
+    sdrs.start_read(0)
+    sdrs.start_read(1)
+    time.sleep(4)
+    x0 = sdrs.stop_read(0)
+    x1 = sdrs.stop_read(1)
     
+    print('len(x0): {0}'.format(len(x0)))
+    print('len(x1): {0}'.format(len(x1)))  
+        

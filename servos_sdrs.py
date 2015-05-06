@@ -41,6 +41,7 @@ class ServosSDRs:
         
     def run(self, ith, speed=None, run_on_stop_read=lambda:None):
         """ run_on_stop_read for things like plotting """
+        print('ServosSdrs: run {0}th'.format(ith))
         speed = self.default_speed if speed is None else speed
         num_exceptions = 0
         
@@ -57,8 +58,9 @@ class ServosSDRs:
                 if mp is not None:
                     angles = np.linspace(curr_angle, des_angle, len(mp))
                     self.angles_and_maxpowers[ith].put([angles, mp])
-                
+
                 curr_angle, des_angle = des_angle, curr_angle
+                #print('ServosSdrs: run_on_stop_read {0}ith'.format(ith))
                 run_on_stop_read()
             except Exception as e:
                 num_exceptions += 1
@@ -68,13 +70,14 @@ class ServosSDRs:
                     break
         
         self.is_stoppeds[ith] = True
-        self.servos.set_angle(ith, 0, 0, block=False)
+        self.servos.set_angle(ith, 0, speed, block=False)
+        
+        print('ServosSdrs: stopping {0}th'.format(ith))
         
     def get_angles_and_maxpowers(self, ith):
         """ For ith sdr, return oldest angle/sample if exists, else None """
         if not self.angles_and_maxpowers[ith].empty():
             return self.angles_and_maxpowers[ith].get()
-            
 
 ########
 # TEST #

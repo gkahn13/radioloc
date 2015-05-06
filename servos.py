@@ -7,6 +7,7 @@ class Servos:
     
     def __init__(self, num_servos, port, baudrate=115200):
         self.num_servos = num_servos
+        self.lock_serial = threading.RLock()
         self.serial = serial.Serial(port, baudrate=baudrate, timeout=1.)
         
         self.min_angle = -np.pi/4.
@@ -20,9 +21,10 @@ class Servos:
     
     def set_angle(self, ith, angle, speed, block=True):
         s = '{0} {1:.3f} {2:.3f}\n'.format(ith, angle, speed)
-        for char in s:
-            self.serial.write(char)
-            time.sleep(0.001)
+        with self.lock_serial:
+            for char in s:
+                self.serial.write(char)
+                time.sleep(0.001)
             
         if block:
             q = self.read_queues[ith]
@@ -32,8 +34,6 @@ class Servos:
         
     def read_serial_run(self):
         while not self.read_stop:
-            #print('read_serial_run: waiting for readline...')
-            #line = self.read_line()
             try:
                 line = self.serial.readline()
             except Exception:
@@ -53,7 +53,8 @@ class Servos:
             self.read_queues[servo_num].put((angle, t))
             
     def get_angle_and_time(self, ith):
-        return self.read_queues[ith].get()        
+        return self.read_queues[ith].get()
+    
 
 ########
 # TEST #
