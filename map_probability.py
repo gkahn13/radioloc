@@ -1,5 +1,19 @@
 from utils import *
 
+def force_aspect(ax,aspect=1):
+    im = ax.get_images()
+    extent =  im[0].get_extent()
+    ax.set_aspect(abs((extent[1]-extent[0])/(extent[3]-extent[2]))/aspect)
+
+def fast_plotter(ax, im_obj, Z):
+    canvas = ax.figure.canvas
+    #background = canvas.copy_from_bbox(ax.bbox)
+    #canvas.restore_region(background)
+    im_obj.set_data(Z)
+    ax.draw_artist(im_obj)
+    #canvas.blit(ax.bbox)
+    #canvas.gui_repaint()
+
 class MapProbability:
     
     def __init__(self, locs, orientations, grid_size):
@@ -25,11 +39,16 @@ class MapProbability:
             plt.yticks(np.r_[0:grid_size])
             ax.grid(which='major', axis='x', linewidth=0.75, linestyle='-', color='0.5')
             ax.grid(which='major', axis='y', linewidth=0.75, linestyle='-', color='0.5')
-            self.imshow_objs[ith] = plt.imshow(np.zeros((self.grid_size, self.grid_size)), origin='lower', interpolation='nearest')
-            self.cbs[ith] = plt.colorbar()
+            self.imshow_objs[ith] = plt.imshow(self.grids[ith], origin='lower', interpolation='nearest')
+            #ax.pcolormesh(self.grids[ith])
+            #ax.set_aspect('equal', 'datalim')
+            #force_aspect(ax)
+            self.cbs[ith] = plt.colorbar(shrink=0.25)
             plt.ion()
             plt.draw()
             plt.pause(0.01)
+            
+        self.backgrounds = [self.fig.canvas.copy_from_bbox(ax.bbox) for ax in self.axes]
     
     def update_probability(self, ith, angle, prob):
         """
@@ -62,11 +81,7 @@ class MapProbability:
                     else:
                         cell_angle = np.pi/2
                 else:
-                    cell_angle = np.arctan(float((i-loc[0]))/float((j-loc[1])))
-                    if (i<loc[0]) and (j<loc[1]):
-                        cell_angle = cell_angle - np.pi
-                    if (i> loc[0]) and (j< loc[1]):
-                        cell_angle = cell_angle
+                    cell_angle = np.arctan2(i-loc[0], j-loc[1])
 
                 cell_angle = cell_angle + offset
 
@@ -95,17 +110,25 @@ class MapProbability:
             
         with self.grids_lock:
             plt.sca(self.axes[plot_num])
+            #self.axes[plot_num].pcolormesh(grid)
+            #self.axes[plot_num].set_aspect('equal', 'datalim')
+            #force_aspect(self.axes[plot_num])
+            
+            #self.fig.canvas.restore_region(self.backgrounds[plot_num])
             self.imshow_objs[plot_num].set_data(grid)
             self.cbs[plot_num].set_clim(vmin=grid.min(),vmax=grid.max())
             self.cbs[plot_num].draw_all() 
-            plt.draw()
+            self.axes[plot_num].draw_artist(self.imshow_objs[plot_num])
+            self.fig.canvas.blit(self.axes[plot_num].bbox)
+            
+            #plt.draw()
             plt.pause(0.01)
     
 
 if __name__ == '__main__':
     grid_size = 20
     locs = np.array([[10, 5], [10, 10], [10, 15]])
-    orientations = np.array([-np.pi/2., -np.pi/2., 0])
+    orientations = np.array([-np.pi/2., -np.pi, 0])
 
     map_prob = MapProbability(locs, orientations, grid_size)
     

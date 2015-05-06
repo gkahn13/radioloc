@@ -10,7 +10,7 @@ antennas = [0, 1]
 
 grid_size = 20
 locs = np.array([[10, 5], [10, 10], [10, 15]])
-orientations = np.array([0, 0, 0])
+orientations = np.array([-np.pi/2., -np.pi/2., 0])
 
 ##########################
 # Create servos and sdrs #
@@ -73,7 +73,7 @@ def plot_step(ith):
         
         map_prob.update_probability(ith, angles, mp/mp.sum())
         map_prob.draw_map(ith)
-        map_prob.draw_map()
+        #map_prob.draw_map()
         
         #with plot_lock:
         #    axes[i].cla()
