@@ -2,10 +2,10 @@ import time
 import sys
 from rflib import *
 
-FREQ = 915e6 # Set my frequency to the gate remote
+FREQ = 910e6 # Set my frequency to the gate remote
 PKTLEN = 6       # Set my packet length to 6 as I am sending
                  # 6 bytes in each packet
-DRATE = 10000     # baud rate of 1000 means that a 1ms pulse
+DRATE = 1000     # baud rate of 1000 means that a 1ms pulse
                  # can be counted as a bit
 
 packet = [
@@ -29,7 +29,8 @@ def send_data(d, data, repeat=4):
 def transmit():
     d = RfCat()
     d.setFreq(FREQ)
-    d.setMdmModulation(MOD_ASK_OOK)
+    d.setMdmModulation(MOD_MSK)
+    # d.setMdmModulation(MOD_ASK_OOK)
     d.makePktFLEN(PKTLEN)
     d.setMdmDRate(DRATE)
     d.setMdmSyncMode(0) # disable syncword and preamble as this is not used
