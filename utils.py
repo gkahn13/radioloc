@@ -10,11 +10,14 @@ from collections import defaultdict
 import Queue
 import time
 import threading
+import matplotlib
 import matplotlib.pyplot as plt
 import scipy.signal as signal
 
 from rtlsdr import RtlSdr, librtlsdr, helpers
 import pyaudio
+
+from IPython import display
 
 ####################
 # Useful functions #

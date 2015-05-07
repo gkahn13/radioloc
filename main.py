@@ -5,12 +5,14 @@ from servos_sdrs import *
 from map_probability import *
 
 num_antennas = 3
-fc = 910e6 # 910e6 # 145.6e6
-antennas = [0]
+fc = 910e6
+antennas = [0,1,2]
 
-grid_size = 20
-locs = np.array([[10, 10], [10, 5], [10, 15]])
-orientations = np.array([-np.pi/2., -np.pi/2., 0])
+grid_size = 50
+locs = np.array([[0.1*grid_size, 0.6*grid_size],
+                [0.1*grid_size, 0.5*grid_size], 
+                [0.1*grid_size, 0.4*grid_size]])
+orientations = np.array([-np.pi/2., -np.pi/2., -np.pi/2.])
 
 ##########################
 # Create servos and sdrs #
@@ -29,7 +31,7 @@ map_prob = MapProbability(locs, orientations, grid_size)
 ###################
 # Initializations #
 ###################
-sdrs.set_gains(1e6)
+sdrs.set_gains(1)
 
 ###################################
 # Continuously plot incoming data #
@@ -43,7 +45,8 @@ def plot_step(ith):
         print('# {0} received #'.format(ith))
         angles, mp = angles_and_maxpowers
         
-        angles = angles[::-1] # TODO: might be different for different servos
+        if ith == 1:
+            angles = angles[::-1] # TODO: might be different for different servos
         mp_med = signal.medfilt(mp, 3)
         mp_smooth = smoothMaxPower(mp, 20)
         prob = mp_smooth/mp_smooth.sum()
@@ -69,7 +72,9 @@ def plot_step(ith):
 #for ith in antennas:
     # servos_sdrs.start(ith, speed=np.pi/5., run_on_stop_read=lambda: plot_step(ith))
 servos_sdrs.start(0, speed=np.pi/5., run_on_stop_read=lambda: plot_step(0))
-#servos_sdrs.start(1, speed=np.pi/5., run_on_stop_read=lambda: plot_step(1))
+servos_sdrs.start(1, speed=np.pi/5., run_on_stop_read=lambda: plot_step(1))
+servos_sdrs.start(2, speed=np.pi/5., run_on_stop_read=lambda: plot_step(2))
+
 
 try:
     while True:
@@ -77,7 +82,9 @@ try:
             if prob_updated[ith]:
                 map_prob.draw_last_map(ith)
                 map_prob.draw_history_map(ith)
-        plt.pause(0.5)
+                prob_updated[ith] = False
+        map_prob.draw_history_map()
+        #plt.pause(0.5)
 except KeyboardInterrupt:
     print('Exited')
 

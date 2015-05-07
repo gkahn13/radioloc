@@ -39,14 +39,7 @@ class MapProbability:
         self.fig, self.axes = plt.subplots(2,1+len(locs))
         for ax in self.axes.reshape(-1):
             plt.sca(ax)
-            plt.xticks(np.r_[0:grid_size])
-            plt.yticks(np.r_[0:grid_size])
-            ax.grid(which='major', axis='x', linewidth=0.75, linestyle='-', color='0.5')
-            ax.grid(which='major', axis='y', linewidth=0.75, linestyle='-', color='0.5')
             self.imshow_objs.append(plt.imshow(uniform, origin='lower', interpolation='nearest'))
-            #ax.pcolormesh(self.grids[ith])
-            #ax.set_aspect('equal', 'datalim')
-            #force_aspect(ax)
             self.cbs.append(plt.colorbar(shrink=0.25))
             plt.ion()
             plt.draw()
@@ -67,7 +60,8 @@ class MapProbability:
             grid = self.grids[0]
             for g in self.grids[1:]:
                 grid *= g
-            grid /= grid.sum()
+            if (grid > 0).any():
+                grid /= grid.sum()
         return grid
         
     def get_last_probability(self, ith):
@@ -104,7 +98,9 @@ class MapProbability:
                 else:
                     grid[i][j] = 0
 
-        grid /= grid.sum()
+        grid[np.isnan(grid)] = 0
+        if (grid > 0).any():
+            grid /= grid.sum()
         return grid
         
     def draw_last_map(self, ith):
@@ -131,18 +127,18 @@ class MapProbability:
     def draw_imshow(self, ax, imshow_obj, cb, grid):
         with self.grids_lock:
             plt.sca(ax)
-            
+        
             imshow_obj.set_data(grid)
             cb.set_clim(vmin=grid.min(),vmax=grid.max())
             cb.draw_all()
             
-            plt.draw()
+            #plt.draw()
             plt.pause(0.01)
     
 
 if __name__ == '__main__':
-    grid_size = 10
-    locs = np.array([[5, 5], [5, 7], [10, 2]])
+    grid_size = 100
+    locs = np.array([[grid_size/2, grid_size/2], [grid_size/2, 0.75*grid_size], [grid_size/2, 0.25*grid_size]])
     orientations = np.array([-np.pi/2., -np.pi, 0])
 
     map_prob = MapProbability(locs, orientations, grid_size)
@@ -161,6 +157,6 @@ if __name__ == '__main__':
         map_prob.draw_history_map(ith)
     map_prob.draw_history_map()
     
-    print('Draw time: {0}'.format(time.time()-start))
+    print('Draw time avg: {0}'.format((time.time()-start)/5))
     print('Press enter to exit')
     raw_input()
