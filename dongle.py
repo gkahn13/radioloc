@@ -2,6 +2,9 @@ import time
 import sys
 from rflib import *
 
+import argparse
+
+
 FREQ = 910e6 # Set my frequency to the gate remote
 PKTLEN = 6       # Set my packet length to 6 as I am sending
                  # 6 bytes in each packet
@@ -26,9 +29,10 @@ def send_data(d, data, repeat=4):
         for packet in data:
             d.RFxmit(packet)
 
-def transmit():
-    d = RfCat()
-    d.setFreq(FREQ)
+def transmit(dongle_index, fc):
+    d = RfCat(dongle_index)
+    # d.setFreq(FREQ)
+    d.setFreq(fc)
     d.setMdmModulation(MOD_MSK)
     # d.setMdmModulation(MOD_ASK_OOK)
     d.makePktFLEN(PKTLEN)
@@ -46,4 +50,12 @@ def transmit():
 
 
 if __name__ == '__main__':
-    transmit()
+    parser = argparse.ArgumentParser(description='dongle index.')
+
+    parser.add_argument("-dongle_index", type=int, help="Dongle index", default=0)
+    parser.add_argument("frequency", type=float, help="Center frequency", default=910e6)
+
+    args = parser.parse_args()
+    print args.dongle_index
+
+    transmit(args.dongle_index, args.frequency)
