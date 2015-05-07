@@ -8,8 +8,8 @@ num_antennas = 3
 fc = 910e6 # 910e6 # 145.6e6
 antennas = [0]
 
-grid_size = 40
-locs = np.array([[20, 20], [10, 10], [10, 15]])
+grid_size = 20
+locs = np.array([[10, 10], [10, 5], [10, 15]])
 orientations = np.array([-np.pi/2., -np.pi/2., 0])
 
 ##########################
@@ -75,7 +75,8 @@ try:
     while True:
         for ith in antennas:
             if prob_updated[ith]:
-                map_prob.draw_map(ith)
+                map_prob.draw_last_map(ith)
+                map_prob.draw_history_map(ith)
         plt.pause(0.5)
 except KeyboardInterrupt:
     print('Exited')

@@ -24,74 +24,43 @@ class MapProbability:
         self.locs = locs
         self.orientations = orientations
         self.grid_size = grid_size
+        self.last_probs = [None]*len(locs)
         self.grids = [None]*(len(locs)+1)
         self.grids_lock = threading.RLock()
-        self.imshow_objs = [None]*(len(locs)+1)
-        self.cbs = [None]*(len(locs)+1)
+        self.imshow_objs = []
+        self.cbs = []
         
+        uniform = np.ones((self.grid_size,self.grid_size),dtype=float)/(grid_size*grid_size)
         for ith in xrange(len(locs)+1):
-            self.grids[ith] = np.ones((self.grid_size,self.grid_size),dtype=float)/(grid_size*grid_size)
+            self.grids[ith] = uniform.copy()
+            if ith < len(locs):
+                self.last_probs[ith] = uniform.copy()
         
-        self.fig, self.axes = plt.subplots(1,1+len(locs))
-        for ith, ax in enumerate(self.axes):
+        self.fig, self.axes = plt.subplots(2,1+len(locs))
+        for ax in self.axes.reshape(-1):
             plt.sca(ax)
             plt.xticks(np.r_[0:grid_size])
             plt.yticks(np.r_[0:grid_size])
             ax.grid(which='major', axis='x', linewidth=0.75, linestyle='-', color='0.5')
             ax.grid(which='major', axis='y', linewidth=0.75, linestyle='-', color='0.5')
-            self.imshow_objs[ith] = plt.imshow(self.grids[ith], origin='lower', interpolation='nearest')
+            self.imshow_objs.append(plt.imshow(uniform, origin='lower', interpolation='nearest'))
             #ax.pcolormesh(self.grids[ith])
             #ax.set_aspect('equal', 'datalim')
             #force_aspect(ax)
-            self.cbs[ith] = plt.colorbar(shrink=0.25)
+            self.cbs.append(plt.colorbar(shrink=0.25))
             plt.ion()
             plt.draw()
             plt.pause(0.01)
             
-        self.backgrounds = [self.fig.canvas.copy_from_bbox(ax.bbox) for ax in self.axes]
-    
+        
     def update_probability(self, ith, angle, prob):
         """
         update internal probability distribution for ith sdr given angle/prob
         """
-        grid, loc, orientation = self.grids[ith+1].copy(), self.locs[ith], self.orientations[ith]
-        valid = np.zeros(grid.shape, dtype=bool)
-        for i in np.r_[:grid.shape[0]]:  #row
-            for j in np.r_[:grid.shape[1]]: #column
-                if j == loc[1]:
-                    if i < loc[0]:
-                        cell_angle = -np.pi/2
-                    else:
-                        cell_angle = np.pi/2
-                else:
-                    cell_angle = np.arctan2(i-loc[0], j-loc[1])
-
-                cell_angle = cell_angle + orientation
-
-                if cell_angle > np.pi:
-                    cell_angle = cell_angle - 2*np.pi
-                elif cell_angle < -np.pi:
-                    cell_angle = cell_angle + 2*np.pi
-
-                # finding the closest point in angle
-                index = np.argmin(abs(angle-cell_angle))
-
-                if min(angle) <= cell_angle <= max(angle):
-                    valid[i,j] = True
-                    grid[i,j] *= prob[index]
-                else:
-                    #valid[i,j] = False
-                    grid[i,j] = 0
-        
-        #grid[valid] /= grid[valid].sum()
-        #grid[True-valid] /= grid[True-valid].sum()
-        grid /= grid.sum()
-        self.grids[ith+1] = grid
-        
-        #grid = MapProbability.rotate_spec(angle, prob, self.grids[ith+1], self.locs[ith], self.orientations[ith])
-        #with self.grids_lock:
-        #    self.grids[ith+1] *= grid
-        #    self.grids[ith+1] /= self.grids[ith+1].sum()
+        self.last_probs[ith] = MapProbability.rotate_spec(angle, prob, self.grids[ith+1], self.locs[ith], self.orientations[ith])
+        with self.grids_lock:
+            self.grids[ith+1] *= self.last_probs[ith]
+            self.grids[ith+1] /= self.grids[ith+1].sum()
     
     def get_total_probability(self):
         with self.grids_lock:
@@ -100,9 +69,12 @@ class MapProbability:
                 grid *= g
             grid /= grid.sum()
         return grid
+        
+    def get_last_probability(self, ith):
+        return self.last_probs[ith].copy()
     
     def get_probability(self, ith):
-        return self.grids[ith+1]
+        return self.grids[ith+1].copy()
     
     @staticmethod
     def rotate_spec(angle, prob_dist, prev_grid, loc, offset):
@@ -129,10 +101,18 @@ class MapProbability:
 
                 if min(angle) <= cell_angle <= max(angle):
                     grid[i][j] = prob_dist[index]
+                else:
+                    grid[i][j] = 0
 
+        grid /= grid.sum()
         return grid
         
-    def draw_map(self, ith=None):
+    def draw_last_map(self, ith):
+        self.draw_imshow(self.axes[0,ith+1], self.imshow_objs[ith+1], \
+                                    self.cbs[ith+1], self.get_last_probability(ith))
+        plt.title('Last map {0}'.format(ith))
+        
+    def draw_history_map(self, ith=None):
         if ith is None:
             plot_num = 0
             grid = self.get_total_probability()
@@ -140,26 +120,29 @@ class MapProbability:
             plot_num = ith+1
             grid = self.get_probability(ith)
             
-        with self.grids_lock:
-            plt.sca(self.axes[plot_num])
-            #self.axes[plot_num].pcolormesh(grid)
-            #self.axes[plot_num].set_aspect('equal', 'datalim')
-            #force_aspect(self.axes[plot_num])
+        o = len(self.locs)+1
+        self.draw_imshow(self.axes[1,plot_num], self.imshow_objs[o+plot_num], \
+                                    self.cbs[o+plot_num], self.grids[plot_num])
+        if plot_num == 0:
+            plt.title('Combined history map')
+        else:
+            plt.title('History map {0}'.format(plot_num))
             
-            #self.fig.canvas.restore_region(self.backgrounds[plot_num])
-            self.imshow_objs[plot_num].set_data(grid)
-            self.cbs[plot_num].set_clim(vmin=grid.min(),vmax=grid.max())
-            self.cbs[plot_num].draw_all() 
-            #self.axes[plot_num].draw_artist(self.imshow_objs[plot_num])
-            #self.fig.canvas.blit(self.axes[plot_num].bbox)
+    def draw_imshow(self, ax, imshow_obj, cb, grid):
+        with self.grids_lock:
+            plt.sca(ax)
+            
+            imshow_obj.set_data(grid)
+            cb.set_clim(vmin=grid.min(),vmax=grid.max())
+            cb.draw_all()
             
             plt.draw()
             plt.pause(0.01)
     
 
 if __name__ == '__main__':
-    grid_size = 20
-    locs = np.array([[10, 5], [10, 10], [10, 15]])
+    grid_size = 10
+    locs = np.array([[5, 5], [5, 7], [10, 2]])
     orientations = np.array([-np.pi/2., -np.pi, 0])
 
     map_prob = MapProbability(locs, orientations, grid_size)
@@ -173,9 +156,10 @@ if __name__ == '__main__':
     map_prob.update_probability(0, angle, prob0)
     map_prob.update_probability(1, angle, prob1)
     start = time.time()
-    map_prob.draw_map(0)
-    map_prob.draw_map(1)
-    map_prob.draw_map()
+    for ith in [0, 1]:
+        map_prob.draw_last_map(ith)
+        map_prob.draw_history_map(ith)
+    map_prob.draw_history_map()
     
     print('Draw time: {0}'.format(time.time()-start))
     print('Press enter to exit')
