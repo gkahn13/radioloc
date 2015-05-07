@@ -16,21 +16,26 @@ def fast_plotter(ax, im_obj, Z):
 
 class MapProbability:
     
-    def __init__(self, locs, orientations, grid_size):
+    def __init__(self, physical_locs, orientations, discretization, grid_physical_size):
         """
-        locs: list of locations
+        physical_locs: list of locations in m
         orientations: list of orientations
+        discretization: m/grid
+        physical_grid_size: max length of grid in m
         """
-        self.locs = locs
+        self.locs = list(map(lambda k: (int(k[0]/discretization),
+                                        int(k[1]/discretization)), locs))
         self.orientations = orientations
-        self.grid_size = grid_size
+        self.discretization = discretization
+        self.grid_size = int(grid_physical_size / float(discretization))
+        
         self.last_probs = [None]*len(locs)
         self.grids = [None]*(len(locs)+1)
         self.grids_lock = threading.RLock()
         self.imshow_objs = []
         self.cbs = []
         
-        uniform = np.ones((self.grid_size,self.grid_size),dtype=float)/(grid_size*grid_size)
+        uniform = np.ones((self.grid_size,self.grid_size),dtype=float)/(self.grid_size*self.grid_size)
         for ith in xrange(len(locs)+1):
             self.grids[ith] = uniform.copy()
             if ith < len(locs):
@@ -120,7 +125,9 @@ class MapProbability:
         self.draw_imshow(self.axes[1,plot_num], self.imshow_objs[o+plot_num], \
                                     self.cbs[o+plot_num], self.grids[plot_num])
         if plot_num == 0:
-            plt.title('Combined history map')
+            max_prob = np.unravel_index(grid.argmax(), grid.shape)
+            plt.title('Combined history map: Max_prob at (%d, %d)' % (max_prob[0]/discretization, max_prob[1]/discretization))
+            # plt.plot(max_prob[0], max_prob[1], 'kx', markersize=2.0)
         else:
             plt.title('History map {0}'.format(plot_num))
             
@@ -137,18 +144,19 @@ class MapProbability:
     
 
 if __name__ == '__main__':
-    grid_size = 100
-    locs = np.array([[grid_size/2, grid_size/2], [grid_size/2, 0.75*grid_size], [grid_size/2, 0.25*grid_size]])
+    physical_grid_size = 15
+    locs = np.array([[5, 5], [5, 7], [10, 2]])
     orientations = np.array([-np.pi/2., -np.pi, 0])
 
-    map_prob = MapProbability(locs, orientations, grid_size)
-    
+    discretization = 1.5
+    map_prob = MapProbability(locs, orientations, discretization, physical_grid_size)
+
     ith = 0
     angle = np.linspace(-np.pi/4., np.pi/4., 100)
     prob0 = np.ones(len(angle)) / len(angle)
     prob1 = np.cos(angle)
     prob1 /= prob1.sum()
-    
+
     map_prob.update_probability(0, angle, prob0)
     map_prob.update_probability(1, angle, prob1)
     start = time.time()
@@ -156,7 +164,7 @@ if __name__ == '__main__':
         map_prob.draw_last_map(ith)
         map_prob.draw_history_map(ith)
     map_prob.draw_history_map()
-    
-    print('Draw time avg: {0}'.format((time.time()-start)/5))
+
+    print('Draw time: {0}'.format(time.time()-start))
     print('Press enter to exit')
     raw_input()
