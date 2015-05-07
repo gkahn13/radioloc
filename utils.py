@@ -11,6 +11,7 @@ import Queue
 import time
 import threading
 import matplotlib.pyplot as plt
+import scipy.signal as signal
 
 from rtlsdr import RtlSdr, librtlsdr, helpers
 import pyaudio
