@@ -5,7 +5,7 @@ from servos_sdrs import *
 from map_probability import *
 
 num_antennas = 3
-fcs = [900e6, 900.1e6]
+fcs = [900e6, 900.4e6]
 antennas = [0,1,2]
 
 physical_grid_size = 5
@@ -31,7 +31,7 @@ map_probs = [MapProbability(locs, orientations, discretization, physical_grid_si
 ###################
 # Initializations #
 ###################
-sdrs.set_gains(1e3)
+sdrs.set_gains(1)
 
 ###################################
 # Continuously plot incoming data #
@@ -57,10 +57,10 @@ def plot_step(ith):
             assert(len(mp) == len(mp_smooth))
                          
             L = 100
-            a = subsample_fixed_length(angles, L)
-            x = subsample_fixed_length(prob, L)
+            a = subsample_fixed_length(angles, L) if len(angles) > L else angles
+            x = subsample_fixed_length(prob, L) if len(prob) > L else prob
             
-            map_prob.update_probability(ith, angles, x)
+            map_prob.update_probability(ith, a, x)
             prob_updated[ith] = True
             
         else:

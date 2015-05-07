@@ -71,8 +71,8 @@ class SDRs:
     
     def run(self, ith, M=32*1024): # 64 * 1024
         def read_cb(samples, qs):
-            lp_len = 256
-            lp_cutoff = 5e3
+            lp_len = 1024
+            lp_cutoff = 10e3
             lp = signal.firwin(lp_len, lp_cutoff, nyq=self.fs/2.)
             
             if self.read_run_flags[ith]:
@@ -81,7 +81,7 @@ class SDRs:
                         fc_centered = fc - self.fc
                         bp = np.exp(1j*2*np.pi*fc_centered*np.r_[0:len(lp)]/self.fs)*lp
                         samples_bp = np.convolve(samples, bp, 'same')
-                        q.put(maxPower(samples, N=4*1024))
+                        q.put(maxPower(samples_bp, N=4*1024))
                         
                         #q.put(maxPower(samples, N=4*1024))
                         #q.put(maxPower(samples - samples.mean(), N=4*1024))
