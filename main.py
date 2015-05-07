@@ -8,11 +8,10 @@ num_antennas = 3
 fc = 910e6
 antennas = [0,1,2]
 
-grid_size = 50
-locs = np.array([[0.1*grid_size, 0.6*grid_size],
-                [0.1*grid_size, 0.5*grid_size], 
-                [0.1*grid_size, 0.4*grid_size]])
+physical_grid_size = 5
+locs = np.array([[1,2.2], [1,1.6], [1, 1]])
 orientations = np.array([-np.pi/2., -np.pi/2., -np.pi/2.])
+discretization = 0.2
 
 ##########################
 # Create servos and sdrs #
@@ -25,7 +24,7 @@ sdrs = SDRs(rtlsdr_devs, fc)
 
 servos_sdrs = ServosSDRs(servos, sdrs)
 
-map_prob = MapProbability(locs, orientations, grid_size)
+map_prob = MapProbability(locs, orientations, discretization, physical_grid_size)
 
 
 ###################

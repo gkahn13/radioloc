@@ -1,22 +1,8 @@
 from utils import *
 
-def force_aspect(ax,aspect=1):
-    im = ax.get_images()
-    extent =  im[0].get_extent()
-    ax.set_aspect(abs((extent[1]-extent[0])/(extent[3]-extent[2]))/aspect)
-
-def fast_plotter(ax, im_obj, Z):
-    canvas = ax.figure.canvas
-    #background = canvas.copy_from_bbox(ax.bbox)
-    #canvas.restore_region(background)
-    im_obj.set_data(Z)
-    ax.draw_artist(im_obj)
-    #canvas.blit(ax.bbox)
-    #canvas.gui_repaint()
-
 class MapProbability:
     
-    def __init__(self, physical_locs, orientations, discretization, grid_physical_size):
+    def __init__(self, physical_locs, orientations, discretization, grid_physical_size, hist_len=5):
         """
         physical_locs: list of locations in m
         orientations: list of orientations
@@ -24,24 +10,23 @@ class MapProbability:
         physical_grid_size: max length of grid in m
         """
         self.locs = list(map(lambda k: (int(k[0]/discretization),
-                                        int(k[1]/discretization)), locs))
+                                        int(k[1]/discretization)), physical_locs))
         self.orientations = orientations
         self.discretization = discretization
         self.grid_size = int(grid_physical_size / float(discretization))
         
-        self.last_probs = [None]*len(locs)
-        self.grids = [None]*(len(locs)+1)
+        uniform = np.ones((self.grid_size,self.grid_size),dtype=float)/(self.grid_size*self.grid_size)
+
+        self.last_probs = [[np.ones((self.grid_size,self.grid_size),dtype=float)/(self.grid_size*self.grid_size)]*hist_len for _ in self.locs]
+        self.grids = [None]*(len(self.locs)+1)
         self.grids_lock = threading.RLock()
         self.imshow_objs = []
         self.cbs = []
         
-        uniform = np.ones((self.grid_size,self.grid_size),dtype=float)/(self.grid_size*self.grid_size)
-        for ith in xrange(len(locs)+1):
+        for ith in xrange(len(self.locs)+1):
             self.grids[ith] = uniform.copy()
-            if ith < len(locs):
-                self.last_probs[ith] = uniform.copy()
         
-        self.fig, self.axes = plt.subplots(2,1+len(locs))
+        self.fig, self.axes = plt.subplots(2,1+len(self.locs))
         for ax in self.axes.reshape(-1):
             plt.sca(ax)
             self.imshow_objs.append(plt.imshow(uniform, origin='lower', interpolation='nearest'))
@@ -55,22 +40,25 @@ class MapProbability:
         """
         update internal probability distribution for ith sdr given angle/prob
         """
-        self.last_probs[ith] = MapProbability.rotate_spec(angle, prob, self.grids[ith+1], self.locs[ith], self.orientations[ith])
+        self.last_probs[ith].pop()
+        self.last_probs[ith].insert(0, MapProbability.rotate_spec(angle, prob, self.grids[ith+1], self.locs[ith], self.orientations[ith]))
         with self.grids_lock:
-            self.grids[ith+1] *= self.last_probs[ith]
-            self.grids[ith+1] /= self.grids[ith+1].sum()
-    
+            g = np.ones(self.last_probs[ith][0].shape)
+            for p in self.last_probs[ith]:
+                g *= p
+            self.grids[ith+1] = g / g.sum()
+            
     def get_total_probability(self):
         with self.grids_lock:
             grid = self.grids[0]
             for g in self.grids[1:]:
-                grid *= g
+                grid += g # TODO: add or mult?
             if (grid > 0).any():
                 grid /= grid.sum()
         return grid
         
     def get_last_probability(self, ith):
-        return self.last_probs[ith].copy()
+        return self.last_probs[ith][0].copy()
     
     def get_probability(self, ith):
         return self.grids[ith+1].copy()
@@ -126,7 +114,7 @@ class MapProbability:
                                     self.cbs[o+plot_num], self.grids[plot_num])
         if plot_num == 0:
             max_prob = np.unravel_index(grid.argmax(), grid.shape)
-            plt.title('Combined history map: Max_prob at (%d, %d)' % (max_prob[0]/discretization, max_prob[1]/discretization))
+            plt.title('Combined history map: Max_prob at ({0:.2f}, {1:.2f})'.format(max_prob[0]*self.discretization, max_prob[1]*self.discretization))
             # plt.plot(max_prob[0], max_prob[1], 'kx', markersize=2.0)
         else:
             plt.title('History map {0}'.format(plot_num))
@@ -147,7 +135,6 @@ if __name__ == '__main__':
     physical_grid_size = 15
     locs = np.array([[5, 5], [5, 7], [10, 2]])
     orientations = np.array([-np.pi/2., -np.pi, 0])
-
     discretization = 1.5
     map_prob = MapProbability(locs, orientations, discretization, physical_grid_size)
 
