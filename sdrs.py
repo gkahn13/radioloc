@@ -4,16 +4,21 @@ class SDRs:
     """
     Functionality for multiple SDRs (non-blocking)
     """
-    def __init__(self, rtlsdr_devs, fc, fs=2.4e5, gain=1.0):
+    def __init__(self, rtlsdr_devs, fcs, fs=2.4e5, gain=1.0):
+        """
+        rtlsdr_devs: device numbers for sdrs (indexes match servos)
+        fcs: frequencies to listen on
+        """
         self.rtlsdr_devs = rtlsdr_devs
+        self.fcs = fcs
         self.rtlsdrs = [None]*len(self.rtlsdr_devs)
         
-        self.fc = fc
+        self.fc = np.mean(fcs)
         self.fs = fs
         self.gain = gain
             
         # for asynchronous reads
-        self.read_queues = [Queue.Queue() for _ in self.rtlsdr_devs]
+        self.read_queues = [[Queue.Queue() for _ in self.fcs] for _ in self.rtlsdr_devs]
         self.read_run_flags = [False]*len(self.rtlsdr_devs)
         self.read_is_stoppeds = [False]*len(self.rtlsdr_devs)
         self.read_threads = [None]*len(self.rtlsdr_devs)
@@ -47,27 +52,43 @@ class SDRs:
         return True
         
     def stop_read(self, ith):
-        """ Returns maxPower of samples gathered """
+        """
+        Returns list of maxPower of samples gathered
+        for each frequency in self.fcs
+        """
         if not self.read_run_flags[ith] or self.rtlsdr_devs[ith] is None:
             return None
         
         self.read_run_flags[ith] = False
         
-        x = np.array([])
-        while not self.read_queues[ith].empty():
-            x = np.append(x, self.read_queues[ith].get())
-        return np.array(x)
+        xs = []
+        for q in self.read_queues[ith]:
+            x = np.array([])
+            while not q.empty():
+                x = np.append(x, q.get())
+            xs.append(np.array(x))
+        return xs
     
     def run(self, ith, M=32*1024): # 64 * 1024
-        def read_cb(samples, q):
+        def read_cb(samples, qs):
+            lp_len = 256
+            lp_cutoff = 5e3
+            lp = signal.firwin(lp_len, lp_cutoff, nyq=self.fs/2.)
+            
             if self.read_run_flags[ith]:
-                try:
-                    q.put(maxPower(samples, N=4*1024))
-                    #q.put(maxPower(samples - samples.mean(), N=4*1024))
-                    #q.put((samples - samples.mean()))
-                    #q.put(samples)
-                except Exception as e:
-                    print('read_cb exception: {0}'.format(e))
+                for q, fc in zip(qs, self.fcs):
+                    try:
+                        fc_centered = fc - self.fc
+                        bp = np.exp(1j*2*np.pi*fc_centered*np.r_[0:len(lp)]/self.fs)*lp
+                        samples_bp = np.convolve(samples, bp, 'same')
+                        q.put(maxPower(samples, N=4*1024))
+                        
+                        #q.put(maxPower(samples, N=4*1024))
+                        #q.put(maxPower(samples - samples.mean(), N=4*1024))
+                        #q.put((samples - samples.mean()))
+                        #q.put(samples)
+                    except Exception as e:
+                        print('read_cb exception: {0}'.format(e))
             
         try:
             self.rtlsdrs[ith].read_samples_async(read_cb, M, context=self.read_queues[ith])
